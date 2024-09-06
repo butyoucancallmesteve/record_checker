@@ -1,65 +1,83 @@
 import tkinter as tk
-from tkinter import messagebox
-import dns.resolver 
+import dns.resolver
 
-# Function to get DNS records
-def get_dns_records(domain):
+def check_cname_records(domain):
+    subdomains = [
+        f"inbound.{domain}",
+        f"nc2048._domainkey.{domain}",
+        f"nc2048.{domain}"
+    ]
+    
     results = {}
-
-    # Get DMARC Record
-    try:
-        dmarc_record = dns.resolver.resolve(f'_dmarc.{domain}', 'TXT')
-        for txt in dmarc_record:
-            if 'v=DMARC1' in txt.to_text():
-                results['DMARC'] = txt.to_text()
-                break
-    except dns.resolver.NoAnswer:
-        results['DMARC'] = 'Not found'
-    except dns.resolver.NXDOMAIN:
-        results['DMARC'] = 'Domain does not exist'
-    except Exception as e:
-        results['DMARC'] = f'Error: {e}'
-
-    # Get SPF Record
-    try:
-        spf_record = dns.resolver.resolve(domain, 'TXT')
-        for txt in spf_record:
-            if 'v=spf1' in txt.to_text():
-                results['SPF'] = txt.to_text()
-                break
-    except dns.resolver.NoAnswer:
-        results['SPF'] = 'Not found'
-    except dns.resolver.NXDOMAIN:
-        results['SPF'] = 'Domain does not exist'
-    except Exception as e:
-        results['SPF'] = f'Error: {e}'
-
-    # Get CNAME Record
-    try:
-        cname_record = dns.resolver.resolve(domain, 'CNAME')
-        results['CNAME'] = cname_record[0].to_text()
-    except dns.resolver.NoAnswer:
-        results['CNAME'] = 'Not found'
-    except dns.resolver.NXDOMAIN:
-        results['CNAME'] = 'Domain does not exist'
-    except Exception as e:
-        results['CNAME'] = f'Error: {e}'
-
+    for subdomain in subdomains:
+        try:
+            answers = dns.resolver.resolve(subdomain, 'CNAME')
+            results[subdomain] = [rdata.to_text() for rdata in answers]
+        except dns.resolver.NoAnswer:
+            results[subdomain] = ["No CNAME record found"]
+        except dns.resolver.NXDOMAIN:
+            results[subdomain] = ["Domain does not exist"]
+        except Exception as e:
+            results[subdomain] = [str(e)]
+    
     return results
 
-# Function to display the DNS records in the output area
-def show_dns_records():
-    domain = domain_entry.get().strip()
-    if domain:
-        results = get_dns_records(domain)
-        output_text.delete(1.0, tk.END)  # Clear the output area
-        output_text.insert(tk.END, f"DMARC Record: {results['DMARC']}\n")
-        output_text.insert(tk.END, f"SPF Record: {results['SPF']}\n")
-        output_text.insert(tk.END, f"CNAME Record: {results['CNAME']}\n")
-    else:
-        messagebox.showerror("Input Error", "Please enter a domain or subdomain.")
+def check_dmarc_record(domain):
+    dmarc_domain = f"_dmarc.{domain}"
+    try:
+        answers = dns.resolver.resolve(dmarc_domain, 'TXT')
+        return [rdata.to_text() for rdata in answers]
+    except dns.resolver.NoAnswer:
+        return ["No DMARC record found"]
+    except dns.resolver.NXDOMAIN:
+        return ["Domain does not exist"]
+    except Exception as e:
+        return [str(e)]
 
-# Create the main application window
+def check_spf_record(domain):
+    try:
+        answers = dns.resolver.resolve(domain, 'TXT')
+        spf_records = [rdata.to_text() for rdata in answers if "v=spf1" in rdata.to_text()]
+        return spf_records if spf_records else ["No SPF record found"]
+    except dns.resolver.NoAnswer:
+        return ["No SPF record found"]
+    except dns.resolver.NXDOMAIN:
+        return ["Domain does not exist"]
+    except Exception as e:
+        return [str(e)]
+
+def show_dns_records():
+    domain = domain_entry.get()
+    if not domain:
+        output_text.delete(1.0, tk.END)
+        output_text.insert(tk.END, "Please enter a domain.\n")
+        return
+    
+    output_text.delete(1.0, tk.END)
+    
+    # Check CNAME records
+    cname_results = check_cname_records(domain)
+    output_text.insert(tk.END, "CNAME Records:\n")
+    for subdomain, cnames in cname_results.items():
+        output_text.insert(tk.END, f"{subdomain}:\n")
+        for cname in cnames:
+            output_text.insert(tk.END, f"  {cname}\n")
+        output_text.insert(tk.END, "\n")
+    
+    # Check DMARC record
+    dmarc_results = check_dmarc_record(domain)
+    output_text.insert(tk.END, "DMARC Record:\n")
+    for dmarc in dmarc_results:
+        output_text.insert(tk.END, f"  {dmarc}\n")
+    output_text.insert(tk.END, "\n")
+    
+    # Check SPF record
+    spf_results = check_spf_record(domain)
+    output_text.insert(tk.END, "SPF Record:\n")
+    for spf in spf_results:
+        output_text.insert(tk.END, f"  {spf}\n")
+    output_text.insert(tk.END, "\n")
+
 root = tk.Tk()
 root.title("DNS Record Checker")
 
@@ -75,8 +93,7 @@ check_button = tk.Button(root, text="Check DNS Records", command=show_dns_record
 check_button.pack(pady=10)
 
 # Create and place the output text area
-output_text = tk.Text(root, height=10, width=60)
+output_text = tk.Text(root, height=20, width=80)
 output_text.pack(pady=10)
 
-# Start the Tkinter event loop
 root.mainloop()

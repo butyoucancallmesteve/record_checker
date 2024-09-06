@@ -12,7 +12,7 @@ This Python program uses the `tkinter` library to create a GUI application that 
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/butyoucancallmesteve/dns-record-checker.git
+    git clone https://github.com/butyoucancallmesteve/record_checker.git
     cd dns-record-checker
     ```
 
